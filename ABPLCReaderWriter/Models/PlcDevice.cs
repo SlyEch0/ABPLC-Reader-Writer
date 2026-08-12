@@ -1,11 +1,33 @@
-namespace ABPLCReaderWriter.Models;
+using System;
 
-public class PlcDevice
+namespace ABPLCReaderWriter.Models
 {
-    public string IpAddress { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string Path { get; set; } = "1,0";
-    public string DisplayName => string.IsNullOrWhiteSpace(Name) ? $"PLC @ {IpAddress}" : $"{Name} ({IpAddress})";
+    public class PlcDevice
+    {
+        public string IpAddress { get; set; }
+        public string Name { get; set; }
+        public string Path { get; set; }
 
-    public override string ToString() => DisplayName;
+        public PlcDevice()
+        {
+            IpAddress = string.Empty;
+            Name = string.Empty;
+            Path = "1,0";
+        }
+
+        public string DisplayName
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(Name))
+                    return "PLC @ " + IpAddress;
+                return Name + " (" + IpAddress + ")";
+            }
+        }
+
+        public override string ToString()
+        {
+            return DisplayName;
+        }
+    }
 }

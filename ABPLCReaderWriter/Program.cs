@@ -90,7 +90,6 @@ internal class Program
         foreach (var d in _discovered)
             AnsiConsole.MarkupLine($"  • {d.IpAddress}");
 
-        // Optionally try to confirm they are Logix by a quick @tags probe
         if (AnsiConsole.Confirm("Attempt to identify Logix PLCs by querying @tags?", false))
         {
             foreach (var d in _discovered.ToList())
@@ -141,7 +140,7 @@ internal class Program
 
     private static async Task BrowseTagsAsync()
     {
-        if (_selectedDevice is null)
+        if (_selectedDevice == null)
         {
             AnsiConsole.MarkupLine("[yellow]Select a PLC first.[/]");
             return;
@@ -161,7 +160,6 @@ internal class Program
 
         AnsiConsole.MarkupLine($"[green]{_groupedTags.Count} tag groups found.[/]");
 
-        // Show a selection of root names (dropdown style)
         var root = AnsiConsole.Prompt(
             new SelectionPrompt<string>()
                 .Title("Select a tag group (root name):")
@@ -190,7 +188,7 @@ internal class Program
 
     private static async Task ReadSelectedTagAttributesAsync()
     {
-        if (_selectedDevice is null || _groupedTags.Count == 0)
+        if (_selectedDevice == null || _groupedTags.Count == 0)
         {
             AnsiConsole.MarkupLine("[yellow]Select a PLC and browse tags first.[/]");
             return;
@@ -204,21 +202,58 @@ internal class Program
 
         var members = _groupedTags[root];
 
-        Dictionary<string, string> values = new();
+        Dictionary<string, string> values = new Dictionary<string, string>();
         await AnsiConsole.Status()
             .StartAsync($"Reading {members.Count} member(s)...", async ctx =>
             {
                 values = await TagService.ReadTagAttributesAsync(_selectedDevice, root, members);
             });
 
+        // Console table
         var table = new Table().Border(TableBorder.Rounded).Title($"[green]{root}[/]");
-        table.AddColumn("Attribute / Tag");
+        table.AddColumn("Tag.Attribute");
+        table.AddColumn("Data Type");
         table.AddColumn("Value");
 
-        foreach (var kv in values)
+        // CSV: A = tag.attribute, B = data type, C = value
+        var csv = new System.Text.StringBuilder();
+        csv.AppendLine("Tag.Attribute,Data Type,Value");
+
+        foreach (var member in members.OrderBy(m => m.Name))
         {
-            table.AddRow(kv.Key, Markup.Escape(kv.Value));
+            string val = "";
+            if (values.ContainsKey(member.Name))
+                val = values[member.Name];
+
+            string csvTag = EscapeCsv(member.Name);
+            string csvType = EscapeCsv(member.TypeDescription);
+            string csvValue = EscapeCsv(val);
+
+            csv.AppendLine(string.Format("{0},{1},{2}", csvTag, csvType, csvValue));
+
+            table.AddRow(member.Name, member.TypeDescription, Markup.Escape(val));
         }
+
         AnsiConsole.Write(table);
+
+        string safeRoot = string.Join("_", root.Split(System.IO.Path.GetInvalidFileNameChars()));
+        string fileName = string.Format("tag_{0}_{1:yyyyMMdd_HHmmss}.csv", safeRoot, DateTime.Now);
+        string fullPath = System.IO.Path.Combine(Environment.CurrentDirectory, fileName);
+
+        System.IO.File.WriteAllText(fullPath, csv.ToString());
+        AnsiConsole.MarkupLine($"\n[green]CSV written to:[/] [cyan]{fullPath}[/]");
+        AnsiConsole.MarkupLine("[grey]Columns: A=Tag.Attribute  B=Data Type  C=Value[/]");
+    }
+
+    private static string EscapeCsv(string field)
+    {
+        if (string.IsNullOrEmpty(field))
+            return "";
+
+        bool needsQuotes = field.Contains(",") || field.Contains("\"") || field.Contains("\n") || field.Contains("\r");
+        if (!needsQuotes)
+            return field;
+
+        return "\"" + field.Replace("\"", "\"\"") + "\"";
     }
 }
